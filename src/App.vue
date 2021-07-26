@@ -44,7 +44,7 @@
             >
             <div class="mt-1 relative rounded-md shadow-md">
               <input
-                v-model="tiker"
+                v-model="ticker"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -59,13 +59,19 @@
                   rounded-md
                 "
                 placeholder="Например DOGE"
-                @keydown.enter="addTiker"
+                @input="errorClear"
+                @keydown.left="errorClear"
+                @keydown.right="errorClear"
+                @keydown.enter="addTicker"
               />
             </div>
             <div
+              v-if="ticker && filtredTickersList.length"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
+                v-for="coin in filtredTickersList"
+                :key="coin"
                 class="
                   inline-flex
                   items-center
@@ -78,59 +84,14 @@
                   text-gray-800
                   cursor-pointer
                 "
+                @click="addTickerByPromt(coin)"
               >
-                BTC
-              </span>
-              <span
-                class="
-                  inline-flex
-                  items-center
-                  px-2
-                  m-1
-                  rounded-md
-                  text-xs
-                  font-medium
-                  bg-gray-300
-                  text-gray-800
-                  cursor-pointer
-                "
-              >
-                DOGE
-              </span>
-              <span
-                class="
-                  inline-flex
-                  items-center
-                  px-2
-                  m-1
-                  rounded-md
-                  text-xs
-                  font-medium
-                  bg-gray-300
-                  text-gray-800
-                  cursor-pointer
-                "
-              >
-                BCH
-              </span>
-              <span
-                class="
-                  inline-flex
-                  items-center
-                  px-2
-                  m-1
-                  rounded-md
-                  text-xs
-                  font-medium
-                  bg-gray-300
-                  text-gray-800
-                  cursor-pointer
-                "
-              >
-                CHD
+                {{ coin }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="error" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -157,7 +118,7 @@
             focus:ring-offset-2
             focus:ring-gray-500
           "
-          @click="addTiker"
+          @click="addTicker"
         >
           <!-- Heroicon name: solid/mail -->
           <svg
@@ -175,11 +136,11 @@
           Добавить
         </button>
       </section>
-      <template v-if="tikers.length">
+      <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="(tiker, ndx) in tikers"
+            v-for="(ticker, ndx) in tickers"
             :key="ndx"
             class="
               bg-white
@@ -190,16 +151,16 @@
               cursor-pointer
             "
             :class="{
-              'border-4': selectedTiker === tiker
+              'border-4': selectedTicker === ticker
             }"
-            @click="selectTiker(tiker)"
+            @click="selectTicker(ticker)"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">
-                {{ tiker.name }} - USD
+                {{ ticker.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ tiker.price }}
+                {{ ticker.price }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -219,7 +180,7 @@
                 transition-all
                 focus:outline-none
               "
-              @click.stop="deleteTiker(tiker)"
+              @click.stop="deleteTicker(ticker)"
             >
               <svg
                 class="h-5 w-5"
@@ -239,9 +200,9 @@
         </dl>
         <hr class="w-full border-t border-gray-600 my-4" />
       </template>
-      <section v-if="selectedTiker" class="relative">
+      <section v-if="selectedTicker" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
-          {{ selectedTiker.name }} - USD
+          {{ selectedTicker.name }} - USD
         </h3>
         <div class="flex items-end border-gray-600 border-b border-l h-64">
           <div
@@ -285,55 +246,94 @@ export default {
 
   data() {
     return {
-      tikers: [],
-      tiker: null,
-      selectedTiker: null,
-      tikerGraph: []
+      error: false,
+      tickers: [],
+      ticker: null,
+      selectedTicker: null,
+      tickerGraph: [],
+      tickersList: [],
+      requestIntervalId: null
     };
   },
 
-  methods: {
-    addTiker() {
-      const currentTiker = {
-        name: this.tiker,
-        price: "-"
-      };
-      this.tikers = [...this.tikers, currentTiker];
-      setInterval(async () => {
-        const response = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTiker.name}&tsyms=USD&api_key=f0f1310977798a0f65fdfd650d57f6e36c453a03d90e358ea1834d873a451c38`
-        );
-        const { USD } = await response.json();
-        this.tikers.find((t) => t.name === currentTiker.name).price =
-          USD > 1 ? USD.toFixed(2) : USD.toPrecision(2);
+  computed: {
+    filtredTickersList() {
+      return this.tickersList
+        .filter((el) => el.includes(this.ticker.toUpperCase()))
+        .slice(0, 4);
+    }
+  },
 
-        if (this.selectedTiker?.name === currentTiker.name) {
-          this.tikerGraph = [...this.tikerGraph, USD];
-        }
-      }, 3000);
-      this.tiker = null;
+  async mounted() {
+    const response = await fetch(
+      "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
+    );
+    const { Data } = await response.json();
+    this.tickersList = Object.keys(Data);
+  },
+
+  beforeUnmount() {
+    clearInterval(this.requestIntervalId);
+  },
+
+  methods: {
+    errorClear() {
+      this.error = false;
     },
 
-    deleteTiker(tikerToRemove) {
-      this.tikers = this.tikers.filter((t) => t !== tikerToRemove);
+    addTicker() {
+      const upperTiker = this.ticker.toUpperCase();
+      this.errorClear;
+      const existanceTicker = this.tickers.find((el) => el.name === upperTiker);
+      if (existanceTicker) {
+        this.error = true;
+        return;
+      }
+      const currentTicker = {
+        name: upperTiker,
+        price: "-"
+      };
+      this.tickers = [...this.tickers, currentTicker];
+      this.requestIntervalId = setInterval(async () => {
+        const response = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=f0f1310977798a0f65fdfd650d57f6e36c453a03d90e358ea1834d873a451c38`
+        );
+        const { USD } = await response.json();
+        this.tickers.find((t) => t.name === currentTicker.name).price =
+          USD > 1 ? USD.toFixed(2) : USD.toPrecision(2);
+
+        if (this.selectedTicker?.name === currentTicker.name) {
+          this.tickerGraph = [...this.tickerGraph, USD];
+        }
+      }, 3000);
+      this.ticker = null;
+    },
+
+    addTickerByPromt(coin) {
+      this.ticker = coin;
+      this.addTicker();
+    },
+
+    deleteTicker(tickerToRemove) {
+      this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
     },
 
     normalizeGraph() {
-      const maxValue = Math.max(...this.tikerGraph);
-      const minValue = Math.min(...this.tikerGraph);
-      return this.tikerGraph.map(
+      const maxValue = Math.max(...this.tickerGraph);
+      const minValue = Math.min(...this.tickerGraph);
+      return this.tickerGraph.map(
         (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
       );
     },
 
     hideGraph() {
-      this.selectedTiker = null;
-      this.tikerGraph = [];
+      this.selectedTicker = null;
+      this.tickerGraph = [];
     },
 
-    selectTiker(tiker) {
-      this.selectedTiker = tiker;
-      this.tikerGraph = [];
+    selectTicker(ticker) {
+      this.selectedTicker = ticker;
+      this.tickerGraph = [];
     }
   }
 };
