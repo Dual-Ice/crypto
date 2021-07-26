@@ -264,7 +264,12 @@ export default {
     }
   },
 
-  async mounted() {
+  async created() {
+    const tickerData = localStorage.getItem("crypto-list");
+    if (tickerData) {
+      this.tickers = JSON.parse(tickerData);
+      this.tickers.forEach((ticker) => this.subscribeToUpdates(ticker.name));
+    }
     const response = await fetch(
       "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
     );
@@ -277,6 +282,21 @@ export default {
   },
 
   methods: {
+    subscribeToUpdates(tickerName) {
+      this.requestIntervalId = setInterval(async () => {
+        const response = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=f0f1310977798a0f65fdfd650d57f6e36c453a03d90e358ea1834d873a451c38`
+        );
+        const { USD } = await response.json();
+        this.tickers.find((t) => t.name === tickerName).price =
+          USD > 1 ? USD.toFixed(2) : USD.toPrecision(2);
+
+        if (this.selectedTicker?.name === tickerName) {
+          this.tickerGraph = [...this.tickerGraph, USD];
+        }
+      }, 3000);
+    },
+
     errorClear() {
       this.error = false;
     },
@@ -294,18 +314,9 @@ export default {
         price: "-"
       };
       this.tickers = [...this.tickers, currentTicker];
-      this.requestIntervalId = setInterval(async () => {
-        const response = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=f0f1310977798a0f65fdfd650d57f6e36c453a03d90e358ea1834d873a451c38`
-        );
-        const { USD } = await response.json();
-        this.tickers.find((t) => t.name === currentTicker.name).price =
-          USD > 1 ? USD.toFixed(2) : USD.toPrecision(2);
 
-        if (this.selectedTicker?.name === currentTicker.name) {
-          this.tickerGraph = [...this.tickerGraph, USD];
-        }
-      }, 3000);
+      localStorage.setItem("crypto-list", JSON.stringify(this.tickers));
+      this.subscribeToUpdates(currentTicker.name);
       this.ticker = null;
     },
 
