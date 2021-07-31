@@ -235,7 +235,7 @@
                 {{ ticker.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ ticker.price }}
+                {{ formatPrice(ticker.price) }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -316,6 +316,7 @@
 </template>
 
 <script>
+import { loadTickers, loadCoins } from "./api";
 export default {
   name: "App",
 
@@ -331,7 +332,8 @@ export default {
       filter: "",
       currentPage: 1,
       perPage: 6,
-      tickersListName: "crypto-list"
+      tickersListName: "crypto-list",
+      requestInterval: 3000
     };
   },
 
@@ -355,7 +357,9 @@ export default {
     },
 
     filtredTickers() {
-      return this.tickers.filter((ticker) => ticker.name.includes(this.filter.toUpperCase()))
+      return this.tickers.filter((ticker) =>
+        ticker.name.includes(this.filter.toUpperCase())
+      );
     },
 
     paginatedTickers() {
@@ -371,7 +375,7 @@ export default {
       const minValue = Math.min(...this.tickerGraph);
 
       if (maxValue === minValue) {
-        return this.tickerGraph.map(() => 50)
+        return this.tickerGraph.map(() => 50);
       }
 
       return this.tickerGraph.map(
@@ -383,7 +387,7 @@ export default {
       return {
         filter: this.filter,
         currentPage: this.currentPage
-      }
+      };
     }
   },
 
@@ -393,7 +397,11 @@ export default {
     },
 
     pageStateOptions(value) {
-      window.history.pushState(null, document.title, `${window.location.pathname}?filter=${value.filter}&currentPage=${value.currentPage}`);
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${value.filter}&currentPage=${value.currentPage}`
+      );
     },
 
     paginatedTickers() {
@@ -403,7 +411,7 @@ export default {
     },
 
     selectedTicker() {
-      this.tickerGraph = []
+      this.tickerGraph = [];
     },
 
     tickers() {
@@ -412,24 +420,25 @@ export default {
   },
 
   async created() {
-    const windowData = Object.fromEntries(new URL(window.location).searchParams.entries());
+    const windowData = Object.fromEntries(
+      new URL(window.location).searchParams.entries()
+    );
 
-    const keys = ['filter', 'currentPage']
-    keys.forEach(key => {
+    const keys = ["filter", "currentPage"];
+    keys.forEach((key) => {
       if (windowData[key]) {
-        this[key] = windowData[key]
+        this[key] = windowData[key];
       }
-    })
+    });
 
     const tickerData = localStorage.getItem("crypto-list");
     if (tickerData) {
       this.tickers = JSON.parse(tickerData);
-      this.tickers.forEach((ticker) => this.subscribeToUpdates(ticker.name));
     }
-    const response = await fetch(
-      "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
-    );
-    const { Data } = await response.json();
+
+    setInterval(this.updateTickers, this.requestInterval)
+
+    const { Data } = await loadCoins();
     this.coinsList = Object.keys(Data);
   },
 
@@ -438,19 +447,33 @@ export default {
   },
 
   methods: {
-    subscribeToUpdates(tickerName) {
-      this.requestIntervalId = setInterval(async () => {
-        const response = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=f0f1310977798a0f65fdfd650d57f6e36c453a03d90e358ea1834d873a451c38`
-        );
-        const { USD } = await response.json();
-        this.tickers.find((t) => t.name === tickerName).price =
-          USD > 1 ? USD.toFixed(2) : USD.toPrecision(2);
+    formatPrice (price) {
+      if (price === '-') {
+        return
+      }
 
-        if (this.selectedTicker?.name === tickerName) {
-          this.tickerGraph = [...this.tickerGraph, USD];
+      return price > 1 ? price.toFixed(2) : price.toPrecision(2);
+    },
+
+    async updateTickers() {
+      if (!this.tickers.length) {
+        return
+      }
+
+      const exchangeData = await loadTickers(
+        this.tickers
+          .map((t) => t.name)
+          .join(',')
+      );
+
+      this.tickers.forEach((ticker) => {
+        const price = exchangeData[ticker.name];
+        ticker.price = price ?? '-';
+
+        if (this.selectedTicker?.name === ticker.name) {
+          this.tickerGraph = [...this.tickerGraph, this.formatPrice(ticker.price)];
         }
-      }, 3000);
+      });
     },
 
     errorClear() {
@@ -459,18 +482,20 @@ export default {
 
     addTicker() {
       this.errorClear;
-      const existanceTicker = this.tickers.find((el) => el.name === this.upperCaseTiker);
+      const existanceTicker = this.tickers.find(
+        (el) => el.name === this.upperCaseTiker
+      );
       if (existanceTicker) {
         this.error = true;
         return;
       }
+
       const currentTicker = {
         name: this.upperCaseTiker,
         price: "-"
       };
       this.tickers = [...this.tickers, currentTicker];
 
-      this.subscribeToUpdates(currentTicker.name);
       this.ticker = "";
       this.filter = "";
     },
