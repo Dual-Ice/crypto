@@ -454,7 +454,7 @@ export default {
       const ticker = this.tickers.find(ticker => ticker.name === tickerName)
       ticker.price = price;
       if (this.selectedTicker?.name === ticker.name) {
-        this.tickerGraph = [...this.tickerGraph, this.formatPrice(ticker.price)];
+        this.tickerGraph = [...this.tickerGraph, ticker.price];
       }
     },
 
