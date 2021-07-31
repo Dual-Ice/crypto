@@ -316,7 +316,7 @@
 </template>
 
 <script>
-import { loadTickers, loadCoins } from "./api";
+import { loadCoins, subscribeToTicker, unSubscribeFromTicker } from "./api";
 export default {
   name: "App",
 
@@ -328,12 +328,10 @@ export default {
       selectedTicker: null,
       tickerGraph: [],
       coinsList: [],
-      requestIntervalId: null,
       filter: "",
       currentPage: 1,
       perPage: 6,
-      tickersListName: "crypto-list",
-      requestInterval: 3000
+      tickersListName: "crypto-list"
     };
   },
 
@@ -434,16 +432,13 @@ export default {
     const tickerData = localStorage.getItem("crypto-list");
     if (tickerData) {
       this.tickers = JSON.parse(tickerData);
+      this.tickers.forEach(ticker => {
+        subscribeToTicker(ticker.name, newPrice => this.updateTicker(ticker.name, newPrice));
+      })
     }
-
-    setInterval(this.updateTickers, this.requestInterval)
 
     const { Data } = await loadCoins();
     this.coinsList = Object.keys(Data);
-  },
-
-  beforeUnmount() {
-    clearInterval(this.requestIntervalId);
   },
 
   methods: {
@@ -455,25 +450,12 @@ export default {
       return price > 1 ? price.toFixed(2) : price.toPrecision(2);
     },
 
-    async updateTickers() {
-      if (!this.tickers.length) {
-        return
+    updateTicker(tickerName, price) {
+      const ticker = this.tickers.find(ticker => ticker.name === tickerName)
+      ticker.price = price;
+      if (this.selectedTicker?.name === ticker.name) {
+        this.tickerGraph = [...this.tickerGraph, this.formatPrice(ticker.price)];
       }
-
-      const exchangeData = await loadTickers(
-        this.tickers
-          .map((t) => t.name)
-          .join(',')
-      );
-
-      this.tickers.forEach((ticker) => {
-        const price = exchangeData[ticker.name];
-        ticker.price = price ?? '-';
-
-        if (this.selectedTicker?.name === ticker.name) {
-          this.tickerGraph = [...this.tickerGraph, this.formatPrice(ticker.price)];
-        }
-      });
     },
 
     errorClear() {
@@ -495,9 +477,13 @@ export default {
         price: "-"
       };
       this.tickers = [...this.tickers, currentTicker];
+      subscribeToTicker(currentTicker.name, newPrice =>
+        this.updateTicker(currentTicker.name, newPrice)
+      );
 
       this.ticker = "";
       this.filter = "";
+
     },
 
     addTickerByPromt(coin) {
@@ -510,6 +496,8 @@ export default {
       if (this.selectedTicker === tickerToRemove) {
         this.selectedTicker = null;
       }
+
+      unSubscribeFromTicker(tickerToRemove.name);
     },
 
     hideGraph() {
