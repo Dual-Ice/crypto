@@ -66,11 +66,11 @@
               />
             </div>
             <div
-              v-if="ticker && filtredTickersList.length"
+              v-if="ticker && filtredCoinsList.length"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
-                v-for="coin in filtredTickersList"
+                v-for="coin in filtredCoinsList"
                 :key="coin"
                 class="
                   inline-flex
@@ -138,9 +138,84 @@
       </section>
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
+        <div class="my-2">
+          Фильтр:
+          <input
+            v-model="filter"
+            class="
+              h-10
+              border-gray-300
+              text-gray-900
+              focus:outline-none focus:ring-gray-500 focus:border-gray-500
+              sm:text-sm
+              rounded-md
+            "
+          />
+        </div>
+        <div>
+          <button
+            v-if="currentPage > 1"
+            class="
+              my-1
+              mx-2
+              inline-flex
+              items-center
+              py-2
+              px-4
+              border border-transparent
+              shadow-sm
+              text-sm
+              leading-4
+              font-medium
+              rounded-full
+              text-white
+              bg-gray-600
+              hover:bg-gray-700
+              transition-colors
+              duration-300
+              focus:outline-none
+              focus:ring-2
+              focus:ring-offset-2
+              focus:ring-gray-500
+            "
+            @click="currentPage = currentPage - 1"
+          >
+            Назад
+          </button>
+          <button
+            v-if="hasNextPage"
+            class="
+              my-1
+              mx-2
+              inline-flex
+              items-center
+              py-2
+              px-4
+              border border-transparent
+              shadow-sm
+              text-sm
+              leading-4
+              font-medium
+              rounded-full
+              text-white
+              bg-gray-600
+              hover:bg-gray-700
+              transition-colors
+              duration-300
+              focus:outline-none
+              focus:ring-2
+              focus:ring-offset-2
+              focus:ring-gray-500
+            "
+            @click="currentPage = currentPage + 1"
+          >
+            Вперёд
+          </button>
+        </div>
+        <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="(ticker, ndx) in tickers"
+            v-for="(ticker, ndx) in paginatedTickers"
             :key="ndx"
             class="
               bg-white
@@ -206,7 +281,7 @@
         </h3>
         <div class="flex items-end border-gray-600 border-b border-l h-64">
           <div
-            v-for="(bar, ndx) in normalizeGraph()"
+            v-for="(bar, ndx) in normalizedGraph"
             :key="ndx"
             :style="{ height: `${bar}%` }"
             class="bg-purple-800 border w-10"
@@ -248,23 +323,104 @@ export default {
     return {
       error: false,
       tickers: [],
-      ticker: null,
+      ticker: "",
       selectedTicker: null,
       tickerGraph: [],
-      tickersList: [],
-      requestIntervalId: null
+      coinsList: [],
+      requestIntervalId: null,
+      filter: "",
+      currentPage: 1,
+      perPage: 6,
+      tickersListName: "crypto-list"
     };
   },
 
   computed: {
-    filtredTickersList() {
-      return this.tickersList
+    upperCaseTiker() {
+      return this.ticker.toUpperCase();
+    },
+
+    filtredCoinsList() {
+      return this.coinsList
         .filter((el) => el.includes(this.ticker.toUpperCase()))
         .slice(0, 4);
+    },
+
+    startPage() {
+      return (this.currentPage - 1) * this.perPage;
+    },
+
+    endPage() {
+      return this.currentPage * this.perPage;
+    },
+
+    filtredTickers() {
+      return this.tickers.filter((ticker) => ticker.name.includes(this.filter.toUpperCase()))
+    },
+
+    paginatedTickers() {
+      return this.filtredTickers.slice(this.startPage, this.endPage);
+    },
+
+    hasNextPage() {
+      return this.filtredTickers.length > this.endPage;
+    },
+
+    normalizedGraph() {
+      const maxValue = Math.max(...this.tickerGraph);
+      const minValue = Math.min(...this.tickerGraph);
+
+      if (maxValue === minValue) {
+        return this.tickerGraph.map(() => 50)
+      }
+
+      return this.tickerGraph.map(
+        (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
+      );
+    },
+
+    pageStateOptions() {
+      return {
+        filter: this.filter,
+        currentPage: this.currentPage
+      }
+    }
+  },
+
+  watch: {
+    filter() {
+      this.currentPage = 1;
+    },
+
+    pageStateOptions(value) {
+      window.history.pushState(null, document.title, `${window.location.pathname}?filter=${value.filter}&currentPage=${value.currentPage}`);
+    },
+
+    paginatedTickers() {
+      if (this.paginatedTickers.length === 0 && this.currentPage > 1) {
+        this.currentPage -= 1;
+      }
+    },
+
+    selectedTicker() {
+      this.tickerGraph = []
+    },
+
+    tickers() {
+      localStorage.setItem(this.tickersListName, JSON.stringify(this.tickers));
     }
   },
 
   async created() {
+    const windowData = Object.fromEntries(new URL(window.location).searchParams.entries());
+
+    const keys = ['filter', 'currentPage']
+    keys.forEach(key => {
+      if (windowData[key]) {
+        this[key] = windowData[key]
+      }
+    })
+
     const tickerData = localStorage.getItem("crypto-list");
     if (tickerData) {
       this.tickers = JSON.parse(tickerData);
@@ -274,7 +430,7 @@ export default {
       "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
     );
     const { Data } = await response.json();
-    this.tickersList = Object.keys(Data);
+    this.coinsList = Object.keys(Data);
   },
 
   beforeUnmount() {
@@ -302,22 +458,21 @@ export default {
     },
 
     addTicker() {
-      const upperTiker = this.ticker.toUpperCase();
       this.errorClear;
-      const existanceTicker = this.tickers.find((el) => el.name === upperTiker);
+      const existanceTicker = this.tickers.find((el) => el.name === this.upperCaseTiker);
       if (existanceTicker) {
         this.error = true;
         return;
       }
       const currentTicker = {
-        name: upperTiker,
+        name: this.upperCaseTiker,
         price: "-"
       };
       this.tickers = [...this.tickers, currentTicker];
 
-      localStorage.setItem("crypto-list", JSON.stringify(this.tickers));
       this.subscribeToUpdates(currentTicker.name);
-      this.ticker = null;
+      this.ticker = "";
+      this.filter = "";
     },
 
     addTickerByPromt(coin) {
@@ -327,24 +482,17 @@ export default {
 
     deleteTicker(tickerToRemove) {
       this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
-    },
-
-    normalizeGraph() {
-      const maxValue = Math.max(...this.tickerGraph);
-      const minValue = Math.min(...this.tickerGraph);
-      return this.tickerGraph.map(
-        (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
-      );
+      if (this.selectedTicker === tickerToRemove) {
+        this.selectedTicker = null;
+      }
     },
 
     hideGraph() {
       this.selectedTicker = null;
-      this.tickerGraph = [];
     },
 
     selectTicker(ticker) {
       this.selectedTicker = ticker;
-      this.tickerGraph = [];
     }
   }
 };
