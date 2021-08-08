@@ -9,6 +9,7 @@ const socket = new WebSocket(
 	`wss://streamer.cryptocompare.com/v2?api_key=${API_KEY}`
 );
 
+// TODO: Добавить поддержку кроссконвертации через BTC, если тикер недоступен
 socket.addEventListener("message", (event) => {
 	const {
 		TYPE: type,
@@ -42,7 +43,7 @@ export const loadCoins = () =>
 	).then((r) => r.json());
 
 
-// TODO: Broadcast channel чтобы работало более чем  одной вкладке
+// TODO: SharedWorker чтобы работало более чем  одной вкладке
 function sendMessageToWS(message) {
 	const stringifiedMessage = JSON.stringify(message);
 

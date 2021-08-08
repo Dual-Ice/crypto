@@ -280,12 +280,14 @@
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ selectedTicker.name }} - USD
         </h3>
-        <div class="flex items-end border-gray-600 border-b border-l h-64">
+        <div 
+          ref="tickerGraph"
+          class="flex items-end border-gray-600 border-b border-l h-64">
           <div
             v-for="(bar, ndx) in normalizedGraph"
             :key="ndx"
-            :style="{ height: `${bar}%` }"
-            class="bg-purple-800 border w-10"
+            :style="{ height: `${bar}%`, width: `${barWidth}px` }"
+            class="bg-purple-800 border"
           />
         </div>
         <button type="button" class="absolute top-0 right-0" @click="hideGraph">
@@ -332,7 +334,9 @@ export default {
       filter: "",
       currentPage: 1,
       perPage: 6,
-      tickersListName: "crypto-list"
+      tickersListName: "crypto-list",
+      maxGraphElements: 1,
+      barWidth: 38
     };
   },
 
@@ -411,6 +415,7 @@ export default {
 
     selectedTicker() {
       this.tickerGraph = [];
+      this.$nextTick(() => this.calculateMaxGraphElements())
     },
 
     tickers() {
@@ -442,7 +447,23 @@ export default {
     this.coinsList = Object.keys(Data);
   },
 
+  mounted() {
+    window.addEventListener('resize', this.calculateMaxGraphElements)
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('resize', this.calculateMaxGraphElements)
+  },
+
   methods: {
+    calculateMaxGraphElements () {
+      if (!this.$refs.tickerGraph) {
+        return;
+      }
+
+      this.maxGraphElements = this.$refs.tickerGraph.clientWidth / this.barWidth
+    },
+
     formatPrice (price) {
       if (price === '-') {
         return '-'
@@ -457,6 +478,9 @@ export default {
       ticker.availability = availability;
       if (this.selectedTicker?.name === ticker.name) {
         this.tickerGraph = [...this.tickerGraph, ticker.price];
+        while (this.tickerGraph.length > this.maxGraphElements) {
+          this.tickerGraph.shift();
+        }
       }
     },
 
@@ -477,7 +501,7 @@ export default {
       const currentTicker = {
         name: this.upperCaseTiker,
         price: "-",
-        availability: false
+        availability: true
       };
 
       this.tickers = [...this.tickers, currentTicker];
