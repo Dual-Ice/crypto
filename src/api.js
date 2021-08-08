@@ -1,6 +1,8 @@
 const API_KEY =
 	"f0f1310977798a0f65fdfd650d57f6e36c453a03d90e358ea1834d873a451c38";
 const AGGREGATE_INDEX = "5";
+const MESSAGE = "INVALID_SUB";
+const ERROR_INDEX = "500";
 
 const tickersHandlers = new Map();
 const socket = new WebSocket(
@@ -10,9 +12,22 @@ const socket = new WebSocket(
 socket.addEventListener("message", (event) => {
 	const {
 		TYPE: type,
-		FROMSYMBOL: currency,
-		PRICE: newPrice
+		PRICE: newPrice,
+		MESSAGE: message,
+		FROMSYMBOL: currency
 	} = JSON.parse(event.data);
+
+	if (type === ERROR_INDEX && message === MESSAGE) {
+		const {
+			PARAMETER: pair
+		} = JSON.parse(event.data)
+
+		const currency = pair.match(/\d+~[A-Z]{1,6}~(?<coin>[A-Z]+)~USD/).groups.coin;
+		const handlers = tickersHandlers.get(currency) ?? [];
+		handlers.forEach((handler) => handler('-', false));
+		return;
+	}
+
 	if (type !== AGGREGATE_INDEX || !newPrice) {
 		return;
 	}

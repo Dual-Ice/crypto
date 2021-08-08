@@ -226,7 +226,8 @@
               cursor-pointer
             "
             :class="{
-              'border-4': selectedTicker === ticker
+              'border-4': selectedTicker === ticker,
+              'bg-red-100': !ticker.availability
             }"
             @click="selectTicker(ticker)"
           >
@@ -433,7 +434,7 @@ export default {
     if (tickerData) {
       this.tickers = JSON.parse(tickerData);
       this.tickers.forEach(ticker => {
-        subscribeToTicker(ticker.name, newPrice => this.updateTicker(ticker.name, newPrice));
+        subscribeToTicker(ticker.name, (newPrice, availability) => this.updateTicker(ticker.name, newPrice, availability));
       })
     }
 
@@ -444,15 +445,16 @@ export default {
   methods: {
     formatPrice (price) {
       if (price === '-') {
-        return
+        return '-'
       }
 
       return price > 1 ? price.toFixed(2) : price.toPrecision(2);
     },
 
-    updateTicker(tickerName, price) {
+    updateTicker(tickerName, price, availability = true) {
       const ticker = this.tickers.find(ticker => ticker.name === tickerName)
       ticker.price = price;
+      ticker.availability = availability;
       if (this.selectedTicker?.name === ticker.name) {
         this.tickerGraph = [...this.tickerGraph, ticker.price];
       }
@@ -474,11 +476,13 @@ export default {
 
       const currentTicker = {
         name: this.upperCaseTiker,
-        price: "-"
+        price: "-",
+        availability: false
       };
+
       this.tickers = [...this.tickers, currentTicker];
-      subscribeToTicker(currentTicker.name, newPrice =>
-        this.updateTicker(currentTicker.name, newPrice)
+      subscribeToTicker(currentTicker.name, (newPrice, availability) =>
+        this.updateTicker(currentTicker.name, newPrice, availability)
       );
 
       this.ticker = "";
